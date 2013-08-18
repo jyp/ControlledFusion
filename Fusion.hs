@@ -45,14 +45,14 @@ takeFB c n x xs m | m <= 1  = x `c` n
 
 muToList :: MuList a -> [a]
 muToList (Build g) = g (:) []
-
 {-
 enumFromMu :: Int -> MuList Int
 enumFromMu n = Build $ \cons nil -> cons n (fold (enumFromMu (n+1)) cons nil)
 -- This is bad because we use gen. rec. here! 
 -}
 
-
+headMu :: MuList a -> a
+headMu (Build g) = g (\h _ -> h) (error "headMu: empty list")
 
 ---------------
 --  Nu lists
