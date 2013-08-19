@@ -92,12 +92,13 @@ repeatMu x = Build $ \cons _nil -> let loop = cons x loop in loop
 replicateMu :: Int -> a -> MuList a
 replicateMu n x = takeMu n (repeatMu x)
 
+-- Not sure how this behaves
 cycleMu :: MuList a -> MuList a
 cycleMu (Build g) = Build $ \cons _nil -> let loop = g cons loop in loop
 
-
 muToList :: MuList a -> [a]
 muToList (Build g) = g (:) []
+
 {-
 enumFromMu :: Int -> MuList Int
 enumFromMu n = Build $ \cons nil -> cons n (fold (enumFromMu (n+1)) cons nil)
@@ -248,14 +249,15 @@ unfoldrNu psi s = Unfold s (maybeToStep . psi)
 
 -- No general rec: can be fused away.  
 
--- (Hopefully: GHC is capable of eliminating the immediately-consumed
--- list constructors)
+newtype Fix f = In {out :: f (Fix f)}
+type FixList a = Fix (Step a)
+
 thaw :: MuList a -> NuList a
-thaw (Build g) = Unfold (g (:) []) go
-  where go [] = Done
-        go (x:xs) = Yield x xs
+thaw (Build g) = Unfold (g fixCons fixNil) out
+  where fixNil = In Done
+        fixCons a x = In (Yield a x)
         
--- General rec: cannot be fused!
+-- Uses general recursion: cannot be fused!
 freeze :: forall a. NuList a -> MuList a 
 freeze (Unfold s0 psi) = Build $ \cons nil ->
   let go s = case psi s of
