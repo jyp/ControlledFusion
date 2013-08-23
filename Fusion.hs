@@ -241,7 +241,40 @@ instance Comonad NuList where
 unfoldrNu :: (b -> Maybe (a, b)) -> b -> NuList a
 unfoldrNu psi s = Unfold s (maybeToStep . psi) 
 
+repeatNu :: a -> NuList a
+repeatNu a = Unfold () (const (Yield a ()))
+
+cycleNu :: NuList a -> NuList a
+cycleNu (Unfold s psi) = Unfold (s,s) psi'
+  where psi' (s,s') =
+          case psi s of
+            Done -> case psi s' of
+              Done -> Done
+              Yield a s'' -> Yield a (s'',s')
+            Yield a s'' -> Yield a (s'',s')
+
 -- intersperseNu see coutts & al
+
+consNu :: a -> NuList a -> NuList a
+consNu a (Unfold s psi) = Unfold (Just (a,s)) psi'
+  where psi' Nothing = Done
+        psi' (Just (a,s)) = case psi s of
+          Done -> Yield a Nothing
+          Yield b s' -> Yield a (Just (b,s'))
+
+nilNu :: NuList a
+nilNu = Unfold () (const Done)
+
+headNu :: NuList a -> a
+headNu (Unfold s psi) = case psi s of
+                          Done -> error "headNu: empty list"
+                          Yield a _ -> a
+
+tailNu :: NuList a -> NuList a
+tailNu (Unfold s psi) = Unfold s' psi
+  where s' = case psi s of
+               Done -> error "tailNu: empty list"
+               Yield _ s'' -> s''
 
 -------------------------
 -- Conversion functions
