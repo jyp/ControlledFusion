@@ -6,10 +6,12 @@ module Fusion where
 
 import Data.List (unfoldr)
 import Control.Comonad
+import Control.Monad
 import Data.Foldable
 import Data.Traversable
 import Control.Applicative
 import Data.Monoid
+import Data.Maybe
 
 -- Principles:
 -- Avoid using freeze
@@ -68,8 +70,9 @@ instance Monad MuList where
   return x = Build $ \cons nil -> cons x nil
   x >>= f = concatMu (fmap f x) -- efficient!
 
-sumMu :: MuList Int -> Int
-sumMu (Build g) = g (+) 0
+instance MonadPlus MuList where
+  mzero = nilMu
+  mplus = appendMu
 
 {-# INLINE takeWhileMu #-}
 takeWhileMu :: (a -> Bool) -> MuList a -> MuList a
@@ -83,6 +86,12 @@ takeMu n (Build g) = Build $ \cons nil -> g (takeFB cons nil) (const nil) n
 takeFB :: (a -> b -> b) -> b -> a -> (Int -> b) -> Int -> b
 takeFB c n x xs m | m <= 1  = x `c` n
                   | otherwise = x `c` xs (m - 1)
+
+atMu :: MuList a -> Int -> a
+atMu (Build g) n = g (\h t x -> if x == 0 then h else t (x-1)) (error "atMu: index not found") n
+
+lastMu :: MuList a -> Maybe a
+lastMu (Build g) = g (\h t -> case t of Nothing -> Just h; Just h' -> Just h') Nothing
 
 {-# INLINE repeatMu #-}
 repeatMu :: a -> MuList a
@@ -138,18 +147,26 @@ instance Monad NuList where
   
 data Step a s = Done | Yield a s
 
+{-# INLINE stepToMaybe #-}
 stepToMaybe :: Step t t1 -> Maybe (t, t1)
 stepToMaybe Done = Nothing
 stepToMaybe (Yield a s) = Just (a,s)
 
+{-# INLINE maybeToStep #-}
 maybeToStep :: Maybe (t, t1) -> Step t t1
 maybeToStep Nothing = Done
 maybeToStep (Just (a,s)) = Yield a s
 
-
+{-# INLINE nuToList #-}
 nuToList :: NuList a -> [a]
 nuToList (Unfold s psi) = unfoldr (stepToMaybe . psi) s
 
+
+{-# INLINE nuFromList #-}
+nuFromList :: [a] -> NuList a
+nuFromList = listToNu
+
+{-# INLINE listToNu #-}
 listToNu :: [a] -> NuList a
 listToNu xs0 = Unfold xs0 go
   where go [] = Done
@@ -157,15 +174,14 @@ listToNu xs0 = Unfold xs0 go
 
 instance Functor NuList where                   
   fmap f (Unfold s g) = Unfold s $ \x -> case g x of
-    Done-> Done
+    Done -> Done
     Yield a t -> Yield (f a) t
 
-instance Foldable NuList where
-  foldMap f = foldNu (\b a -> b `mappend` f a) mempty
-
+{-# INLINE zipNu #-}
 zipNu :: NuList a -> NuList b -> NuList (a,b)
 zipNu = zipWithNu (,)
 
+{-# INLINE zipWithNu #-}
 zipWithNu :: (a -> b -> c) -> NuList a -> NuList b -> NuList c
 zipWithNu f (Unfold s1 psi1) (Unfold s2 psi2) = Unfold (s1,s2) go 
   where go (t1,t2) = case (psi1 t1,psi2 t2) of
@@ -174,6 +190,7 @@ zipWithNu f (Unfold s1 psi1) (Unfold s2 psi2) = Unfold (s1,s2) go
            (Yield x u1,Yield y u2) -> Yield (f x y) (u1,u2)
 
 
+{-# INLINE takeNu #-}
 takeNu :: Int -> NuList a -> NuList a
 takeNu n0 (Unfold s0 psi) = Unfold (n0,s0) (uncurry go) where
   go 0 _ = Done
@@ -181,29 +198,21 @@ takeNu n0 (Unfold s0 psi) = Unfold (n0,s0) (uncurry go) where
     Done -> Done
     Yield x t -> Yield x (n-1,t)
 
+{-# INLINE takeWhileNu #-}
 takeWhileNu :: (a -> Bool) -> NuList a -> NuList a
 takeWhileNu p (Unfold s0 psi) = Unfold s0 go where
   go s = case psi s of
     Done -> Done
     Yield x t -> if p x then Yield x t else Done
 
+{-# INLINE enumNu #-}
 enumNu :: Int -> NuList Int
 enumNu to = Unfold 0 $ \n -> if n < to then Yield n (n+1) else Done
 
 enumFromNu :: Int -> NuList Int
 enumFromNu from = Unfold from $ \n -> Yield n (n+1)
 
-sumNu :: NuList Int -> Int
-sumNu = foldNu (+) 0
-
--- 'foldl' (implemented with accumulator).  It's ok to use general
--- recursion here because it is the end of the pipeline.
-foldNu :: (b -> a -> b) -> b -> NuList a -> b
-foldNu f k (Unfold s0 psi) = go k s0
-  where go acc s = case psi s of
-          Done -> acc
-          Yield x t  -> go (f acc x) t
-          
+{-# INLINE scanNu #-}
 scanNu :: (b -> a -> b) -> b -> NuList a -> NuList b
 scanNu f k (Unfold s0 psi) = Unfold (Just (k,s0)) go where
   go Nothing = Done
@@ -211,6 +220,14 @@ scanNu f k (Unfold s0 psi) = Unfold (Just (k,s0)) go where
     Done -> Yield acc Nothing
     Yield x t -> Yield acc (Just (f acc x,t))
     
+    
+{-# INLINE iterateNu #-}
+iterateNu :: (a -> a) -> a -> NuList a    
+iterateNu f x0 = Unfold x0 go where
+  go x = Yield x (f x) 
+    
+{-         
+-- Do not fuse: use freeze
 dropNu :: Int -> NuList a -> NuList a
 dropNu n0 (Unfold s0 psi) = Unfold (go n0 s0) psi
   where go 0 s = s
@@ -229,6 +246,8 @@ splitAtNu n xs = (takeNu n xs,dropNu n xs)
 
 spanNu :: (a -> Bool) -> NuList a -> (NuList a, NuList a)
 spanNu p xs = (takeWhileNu p xs,dropWhileNu p xs)
+-}
+
 
 instance Comonad NuList where
   extract (Unfold s0 psi) = case psi s0 of
@@ -250,11 +269,29 @@ cycleNu (Unfold s psi) = Unfold (s,s) psi'
   where psi' (s,s') =
           case psi s of
             Done -> case psi s' of
-              Done -> Done
+              Done -> Done -- exception empty list?
               Yield a s'' -> Yield a (s'',s')
             Yield a s'' -> Yield a (s'',s')
 
+cycleNu' :: NuList a -> NuList a 
+cycleNu' (Unfold s0 psi) = case psi s0 of
+  Done -> error "cycleNu': empty list"
+  _ -> Unfold s0 psi' where
+    psi' s = case psi s of
+            Done -> psi s0
+            y -> y
+            
+-- TODO: check if fusion happens in the above case.            
+
 -- intersperseNu see coutts & al
+
+
+consNu' :: a -> NuList a -> NuList a
+consNu' a0 (Unfold s0 psi) = Unfold Nothing psi'
+  where psi' Nothing = Yield a0 (Just s0)
+        psi' (Just s) = case psi s of
+          Done -> Done
+          Yield b s' -> Yield b (Just s')
 
 consNu :: a -> NuList a -> NuList a
 consNu a (Unfold s psi) = Unfold (Just (a,s)) psi'
@@ -276,6 +313,30 @@ tailNu (Unfold s psi) = Unfold s' psi
   where s' = case psi s of
                Done -> error "tailNu: empty list"
                Yield _ s'' -> s''
+
+-------------------------
+-- Sinks
+               
+instance Foldable NuList where  
+  foldMap f = foldNu (\b a -> b `mappend` f a) mempty
+
+        
+sumNu :: NuList Int -> Int
+sumNu = foldNu (+) 0
+
+-- 'foldl' (implemented with accumulator).  It's ok to use general
+-- recursion here because it is the end of the pipeline.
+foldNu :: (b -> a -> b) -> b -> NuList a -> b
+foldNu f k (Unfold s0 psi) = go k s0
+  where go acc s = case psi s of
+          Done -> acc
+          Yield x t  -> go (f acc x) t
+
+-- In reality though, this should be implemented as:
+-- last . freeze . scanNu
+foldNu' :: (b -> a -> b) -> b -> NuList a -> b
+foldNu' f k xs = fromJust $ lastMu $ freeze $ scanNu f k xs
+          
 
 -------------------------
 -- Conversion functions
