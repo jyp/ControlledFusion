@@ -1,0 +1,93 @@
+
+* Generalities
+
+| Logic              | F.P.L.             |
+|--------------------+--------------------|
+| Proposition        | Type               |
+| Proof              | Program            |
+| Hypothesis         | Parameter          |
+| Conclusion         | Result             |
+| Proof verification | Type-checking      |
+| Proof testing      | Execution          |
+| Cut                | Memory allocation  |
+| Cut-reduction      | Partial evaluation |
+| Circular argument  | General recursion  |
+
+* Fusion as a (proof-theory)-based technique for deforestation. 
+
+To eliminate allocations of a given type T:
+  - Convert the structure to a representation which does not use general recursion
+  - Use standard cut-elimination techniques
+  - Some cuts might not be eliminated; so convert back to the original structure.  (Optional!) 
+
+* Narrowing to Lists
+
+All that follows applies to any Haskell data structure; lists are a simple useful example.
+
+* Choosing the representation.
+
+Let F a x = 1 + a ⊗ x
+
+We have two well-known representations for Lists to choose from:
+
+1. List a = μx. F a x
+2. List a = νx. F a x
+
+
+1. Used by Gill et al; yields 'shortcut fusion', 'foldr/build' rule
+2. Used by (Folklore and?) Svenningsson; yields 'destroy/unfoldr' rule
+
+** Pros and cons 
+
+1.
+  - has: concat, Monad, Foldable, filter, take, drop (guess), access any element
+  - has not: zip, enum, scan
+  - difficult to create lists which are not constant or mirror the structure of an existing list.
+
+2. 
+  - has: append, take, zip, enum, scan
+  - has not: concat, Monad, drop
+  - difficult to consume lists without recreating one with the same (or longer) structure!
+
+  - one can use G.R. to fold such a list, but the structure of that fold cannot be eliminated. 
+    It's ok if this is a 'sink' (the last fold in a pipeline)
+
+
+* Controlled Fusion
+
+What if we let the user choose the representation?
+
+We provide:
+
+1. freeze : NuList a -> MuList a
+2. thaw   : MuList a -> NuList a
+
+file:Fusion.hs::Conversion
+
+**   ★   Punchline   ★
+The user can control where allocation happens by using freeze!
+
+* Examples
+
+file:Examples.hs
+file:../nofib/imaginary/primes/Main.hs
+
+* Revisiting Stream Fusion
+
+- Slap a Delay monad on top of NuList
+- Allows for a Monad implementation
+- Defeats the point!
+- Explains why this did not make it into GHC
+  + see file:../nofib/imaginary/paraffins/Main.hs
+
+* FAQ
+** Surely we can't inline every function call?
+Let the user decide! If not inlined then we pay for the list allocation.
+
+
+    
+
+
+
+
+
