@@ -81,6 +81,7 @@ file:../nofib/imaginary/primes/Main.hs
   + see file:../nofib/imaginary/paraffins/Main.hs
 
 * Future: Linear Arrays
+
 * FAQ
 ** Surely we can't inline every function call?
 Let the user decide! If not inlined then we pay for the list allocation.
@@ -92,3 +93,13 @@ Let the user decide! If not inlined then we pay for the list allocation.
 
 
 
+* Notes:
+** no fusion system is perfect
+- Given: null, filter and enum
+- Fuse: null $ filter p $ enum 0 infty
+- Decides whether p is satisfiable.
+** Examples
+*** On other data structures
+** How easy/difficult is it to program in this style?
+** Investigate sharing on nuList/good story for fibs
+  -> There is no possible state! (Infinite type)

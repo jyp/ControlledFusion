@@ -269,8 +269,8 @@ instance Comonad NuList where
       Done -> Done
       Yield _ t -> Yield (Unfold s psi) t
 
-unfoldrNu :: (b -> Maybe (a, b)) -> b -> NuList a
-unfoldrNu psi s = Unfold s (maybeToStep . psi)
+unfold :: (b -> Maybe (a, b)) -> b -> NuList a
+unfold psi s = Unfold s (maybeToStep . psi)
 
 repeatNu :: a -> NuList a
 repeatNu a = Unfold () (const (Yield a ()))
