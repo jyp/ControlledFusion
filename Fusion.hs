@@ -117,6 +117,15 @@ enumFromMu n = Build $ \cons nil -> cons n (fold (enumFromMu (n+1)) cons nil)
 headMu :: MuList a -> a
 headMu (Build g) = g (\h _ -> h) (error "headMu: empty list")
 
+foldMuNu :: (a -> b -> c -> c) -> c -> MuList a -> NuList b -> c
+foldMuNu f z (Build g) = g (\h r ys -> case viewNu ys of 
+                              Done -> z
+                              Yield y ys' -> f h y (r ys')) -- t is fed the smaller list.
+                           (\_ -> z)
+
+zipMuNu :: MuList a -> NuList b -> MuList (a,b)
+zipMuNu xs ys = Build $ \cons nil -> foldMuNu (\x y t -> (x,y) `cons` t) nil xs ys
+
 ---------------
 --  Nu lists
 
@@ -161,7 +170,6 @@ maybeToStep (Just (a,s)) = Yield a s
 nuToList :: NuList a -> [a]
 nuToList (Unfold s psi) = unfoldr (stepToMaybe . psi) s
 
-
 {-# INLINE nuFromList #-}
 nuFromList :: [a] -> NuList a
 nuFromList = listToNu
@@ -184,11 +192,10 @@ zipNu = zipWithNu (,)
 {-# INLINE zipWithNu #-}
 zipWithNu :: (a -> b -> c) -> NuList a -> NuList b -> NuList c
 zipWithNu f (Unfold s1 psi1) (Unfold s2 psi2) = Unfold (s1,s2) go 
-  where go (t1,t2) = case (psi1 t1,psi2 t2) of
+  where go ~(t1,t2) = case (psi1 t1,psi2 t2) of
            (Done,_) -> Done
            (_,Done) -> Done
            (Yield x u1,Yield y u2) -> Yield (f x y) (u1,u2)
-
 
 {-# INLINE takeNu #-}
 takeNu :: Int -> NuList a -> NuList a
@@ -265,7 +272,7 @@ repeatNu :: a -> NuList a
 repeatNu a = Unfold () (const (Yield a ()))
 
 cycleNu :: NuList a -> NuList a
-cycleNu (Unfold s psi) = Unfold (s,s) psi'
+cycleNu (Unfold s psi) = Unfold (s,s) psi' 
   where psi' (s,s') =
           case psi s of
             Done -> case psi s' of
@@ -292,13 +299,14 @@ consNu' a0 (Unfold s0 psi) = Unfold Nothing psi'
         psi' (Just s) = case psi s of
           Done -> Done
           Yield b s' -> Yield b (Just s')
-
+{-
 consNu :: a -> NuList a -> NuList a
 consNu a (Unfold s psi) = Unfold (Just (a,s)) psi'
   where psi' Nothing = Done
         psi' (Just (a,s)) = case psi s of
           Done -> Yield a Nothing
           Yield b s' -> Yield a (Just (b,s'))
+-}
 
 nilNu :: NuList a
 nilNu = Unfold () (const Done)
@@ -313,6 +321,11 @@ tailNu (Unfold s psi) = Unfold s' psi
   where s' = case psi s of
                Done -> error "tailNu: empty list"
                Yield _ s'' -> s''
+
+viewNu :: NuList a -> Step a (NuList a)
+viewNu (Unfold s psi) = case psi s of
+                             Done -> Done
+                             Yield a s' -> Yield a (Unfold s' psi)
 
 -------------------------
 -- Sinks
@@ -357,7 +370,7 @@ freeze (Unfold s0 psi) = Build $ \cons nil ->
   let go s = case psi s of
           Done -> nil
           Yield a s' -> cons a (go s')
-  in go s0
+  in  go s0
 
 freezeList :: forall a. [a] -> MuList a 
 freezeList xs = Build $ \cons nil -> Prelude.foldr cons nil xs
