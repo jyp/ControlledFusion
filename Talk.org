@@ -1,6 +1,8 @@
 
 * Generalities
 
+Deforestation
+
 | Logic              | F.P.L.             |
 |--------------------+--------------------|
 | Proposition        | Type               |
@@ -10,7 +12,7 @@
 | Proof verification | Type-checking      |
 | Proof testing      | Execution          |
 | Cut                | Memory allocation  |
-| Cut-reduction      | Partial evaluation |
+| Cut-elimination    | Partial evaluation |
 | Circular argument  | General recursion  |
 
 * Fusion as a (proof-theory)-based technique for deforestation. 
@@ -38,7 +40,6 @@ We have two well-known representations for Lists to choose from:
 2. Used by (Folklore and?) Svenningsson; yields 'destroy/unfoldr' rule
 
 ** Pros and cons 
-
 1.
   - has: concat, Monad, Foldable, filter, take, drop (guess), access any element
   - has not: zip, enum, scan
@@ -58,7 +59,6 @@ We have two well-known representations for Lists to choose from:
 What if we let the user choose the representation?
 
 We provide:
-
 1. freeze : NuList a -> MuList a
 2. thaw   : MuList a -> NuList a
 
@@ -80,6 +80,7 @@ file:../nofib/imaginary/primes/Main.hs
 - Explains why this did not make it into GHC
   + see file:../nofib/imaginary/paraffins/Main.hs
 
+* Future: Linear Arrays
 * FAQ
 ** Surely we can't inline every function call?
 Let the user decide! If not inlined then we pay for the list allocation.

@@ -121,6 +121,7 @@ headMu (Build g) = g (\h _ -> h) (error "headMu: empty list")
 --  Nu lists
 
 -- NuList a = νF
+data Step a s = Done | Yield a s
 
 data NuList a where
   Unfold :: s -> (s -> Step a s) -> NuList a
@@ -144,8 +145,6 @@ instance Monad NuList where
     False -> Done
   (>>=) = flip concatMapNu -- Not *really* a monad: uses general recursion.
 -}
-
-data Step a s = Done | Yield a s
 
 {-# INLINE stepToMaybe #-}
 stepToMaybe :: Step t t1 -> Maybe (t, t1)
@@ -353,6 +352,7 @@ foldNu' f k xs = fromJust $ lastMu $ freeze $ scanNu f k xs
 newtype Fix f = In {out :: f (Fix f)}
 type FixList a = Fix (Step a)
 
+{-# INLINE thaw #-}
 thaw :: MuList a -> NuList a
 thaw (Build g) = Unfold (g fixCons fixNil) out
   where fixNil = In Done
