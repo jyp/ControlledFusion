@@ -1,7 +1,8 @@
 {-# LANGUAGE MonadComprehensions #-}
 module Main where
 
-import Fusion
+import Control.Fusion.List.SkipNu
+import Control.Fusion.List
 import Data.Foldable as F hiding (fold,concatMap)
 import qualified Tree as T
 import Data.Monoid
@@ -61,10 +62,26 @@ l n = Prelude.sum
       , m <- [1..k]
       ]
 
+nenu :: Int -> Int
+nenu n
+    = sumNeNu
+    [ k * m
+    | k <- enumFromToNeNu 1 n
+    , m <- enumFromToNeNu 1 k
+    ]
+
+skipnu :: Int -> Int
+skipnu n
+    = sumSkipNu
+    [ k * m
+    | k <- enumFromToSkipNu 1 n
+    , m <- enumFromToSkipNu 1 k
+    ]
+
 main :: IO ()
 main = do
     [arg] <- getArgs
-    print (l (read arg))
+    print (skipnu (read arg))
     -- f 3000   : 0.759s
     -- g 3000   : 0.059s        <---- winner!!
     -- t 3000   : 0.119s
