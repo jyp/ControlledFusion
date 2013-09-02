@@ -5,3 +5,13 @@ cabal-dev
 *.chi
 *.chs.h
 .virthualenv
+*~
+.cake
+.cake.log
+*.mpx
+*.log
+mpxerr.*
+*.aux
+*.pdf
+*.bbl
+*.mp
