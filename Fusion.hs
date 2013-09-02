@@ -108,6 +108,9 @@ cycleMu (Build g) = Build $ \cons _nil -> let loop = g cons loop in loop
 muToList :: MuList a -> [a]
 muToList (Build g) = g (:) []
 
+muFromList :: [a] -> MuList a
+muFromList xs = Build (\c n -> Prelude.foldr c n xs)
+
 {-
 enumFromMu :: Int -> MuList Int
 enumFromMu n = Build $ \cons nil -> cons n (fold (enumFromMu (n+1)) cons nil)
