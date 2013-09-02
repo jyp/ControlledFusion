@@ -111,20 +111,26 @@ muToList (Build g) = g (:) []
 {-
 enumFromMu :: Int -> MuList Int
 enumFromMu n = Build $ \cons nil -> cons n (fold (enumFromMu (n+1)) cons nil)
--- This is bad because we use gen. rec. here!
+-- This is bad because we use gen. rec.
+
+enumMu :: (Enum a, Ord a) => a -> a -> MuList a
+enumMu from to | from > to = nilMu
+               | otherwise = consMu from (enumMu (succ from) to)
 -}
 
 headMu :: MuList a -> a
 headMu (Build g) = g (\h _ -> h) (error "headMu: empty list")
 
 foldMuNu :: (a -> b -> c -> c) -> c -> MuList a -> NuList b -> c
-foldMuNu f z (Build g) = g (\h r ys -> case viewNu ys of 
-                              Done -> z
-                              Yield y ys' -> f h y (r ys')) -- t is fed the smaller list.
-                           (\_ -> z)
+foldMuNu f z (Build fold) = fold (\h r ys -> case viewNu ys of 
+                                     Done -> z
+                                     Yield y ys' -> f h y (r ys')) -- t is fed the smaller list.
+                                 (\_ -> z)
 
 zipMuNu :: MuList a -> NuList b -> MuList (a,b)
 zipMuNu xs ys = Build $ \cons nil -> foldMuNu (\x y t -> (x,y) `cons` t) nil xs ys
+
+reverseMuNu xs = Data.Foldable.foldl (flip consNu) nilNu xs
 
 ---------------
 --  Nu lists
@@ -297,8 +303,8 @@ cycleNu' (Unfold s0 psi) = case psi s0 of
 -- intersperseNu see coutts & al
 
 
-consNu' :: a -> NuList a -> NuList a
-consNu' a0 (Unfold s0 psi) = Unfold Nothing psi'
+consNu :: a -> NuList a -> NuList a
+consNu a0 (Unfold s0 psi) = Unfold Nothing psi'
   where psi' Nothing = Yield a0 (Just s0)
         psi' (Just s) = case psi s of
           Done -> Done

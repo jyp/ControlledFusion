@@ -93,13 +93,3 @@ Let the user decide! If not inlined then we pay for the list allocation.
 
 
 
-* Notes:
-** no fusion system is perfect
-- Given: null, filter and enum
-- Fuse: null $ filter p $ enum 0 infty
-- Decides whether p is satisfiable.
-** Examples
-*** On other data structures
-** How easy/difficult is it to program in this style?
-** Investigate sharing on nuList/good story for fibs
-  -> There is no possible state! (Infinite type)
