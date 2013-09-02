@@ -7,7 +7,7 @@ module Fusion where
 import Data.List (unfoldr)
 import Control.Comonad
 import Control.Monad
-import Data.Foldable
+import Data.Foldable as T hiding (fold)
 import Data.Traversable
 import Control.Applicative
 import Data.Monoid
@@ -122,15 +122,16 @@ headMu :: MuList a -> a
 headMu (Build g) = g (\h _ -> h) (error "headMu: empty list")
 
 foldMuNu :: (a -> b -> c -> c) -> c -> MuList a -> NuList b -> c
-foldMuNu f z (Build fold) = fold (\h r ys -> case viewNu ys of 
+foldMuNu f z xs = fold xs (\h r ys -> case viewNu ys of
                                      Done -> z
                                      Yield y ys' -> f h y (r ys')) -- t is fed the smaller list.
-                                 (\_ -> z)
+                          (\_ -> z)
 
 zipMuNu :: MuList a -> NuList b -> MuList (a,b)
 zipMuNu xs ys = Build $ \cons nil -> foldMuNu (\x y t -> (x,y) `cons` t) nil xs ys
 
-reverseMuNu xs = Data.Foldable.foldl (flip consNu) nilNu xs
+reverseMuNu :: MuList a -> NuList a
+reverseMuNu xs = T.foldl (flip consNu) nilNu xs
 
 ---------------
 --  Nu lists
@@ -196,7 +197,7 @@ zipNu = zipWithNu (,)
 
 {-# INLINE zipWithNu #-}
 zipWithNu :: (a -> b -> c) -> NuList a -> NuList b -> NuList c
-zipWithNu f (Unfold s1 psi1) (Unfold s2 psi2) = Unfold (s1,s2) go 
+zipWithNu f (Unfold s1 psi1) (Unfold s2 psi2) = Unfold (s1,s2) go
   where go ~(t1,t2) = case (psi1 t1,psi2 t2) of
            (Done,_) -> Done
            (_,Done) -> Done
