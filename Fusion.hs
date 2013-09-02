@@ -7,7 +7,7 @@ module Fusion where
 import Data.List (unfoldr)
 import Control.Comonad
 import Control.Monad
-import Data.Foldable
+import Data.Foldable as T hiding (fold)
 import Data.Traversable
 import Control.Applicative
 import Data.Monoid
@@ -25,6 +25,11 @@ import Data.Maybe
 -- Fα = 1 + a × α
 -- MuList a = μF
 newtype MuList a = Build {fold :: forall x. (a -> x -> x) -> x -> x}
+    {-   {fold :: forall x. (forall k . a -> x -> (x -> k) -> k)
+                         -> (forall k . (x -> k) -> k)
+                         ->
+    -}
+
 
 instance Show a => Show (MuList a) where
   show = show . muToList
@@ -121,19 +126,26 @@ enumMu from to | from > to = nilMu
                | otherwise = consMu from (enumMu (succ from) to)
 -}
 
+enumMu :: (Num a, Ord a) => a -> a -> MuList a
+enumMu from to = Build $ \ cons nil ->
+    let go n | n > to = nil
+             | otherwise = cons n (go (n + 1))
+    in  go from
+
 headMu :: MuList a -> a
 headMu (Build g) = g (\h _ -> h) (error "headMu: empty list")
 
 foldMuNu :: (a -> b -> c -> c) -> c -> MuList a -> NuList b -> c
-foldMuNu f z (Build fold) = fold (\h r ys -> case viewNu ys of 
+foldMuNu f z xs = fold xs (\h r ys -> case viewNu ys of
                                      Done -> z
                                      Yield y ys' -> f h y (r ys')) -- t is fed the smaller list.
-                                 (\_ -> z)
+                          (\_ -> z)
 
 zipMuNu :: MuList a -> NuList b -> MuList (a,b)
 zipMuNu xs ys = Build $ \cons nil -> foldMuNu (\x y t -> (x,y) `cons` t) nil xs ys
 
-reverseMuNu xs = Data.Foldable.foldl (flip consNu) nilNu xs
+reverseMuNu :: MuList a -> NuList a
+reverseMuNu xs = T.foldl (flip consNu) nilNu xs
 
 ---------------
 --  Nu lists
@@ -147,7 +159,10 @@ data NuList a where
 instance Show a => Show (NuList a) where
   show = show . nuToList
 
-{-
+--concatMapMuNu :: (a -> NuList b) -> MuList a -> NuList b
+--concatMapMuNu f (Build g) =
+
+{-# INLINE concatMapNu #-}
 concatMapNu :: (a -> NuList b) -> NuList a -> NuList b
 concatMapNu f (Unfold sa0 nexta) = Unfold (sa0, Nothing) (uncurry next) where
   next sa Nothing = case nexta sa of
@@ -158,11 +173,12 @@ concatMapNu f (Unfold sa0 nexta) = Unfold (sa0, Nothing) (uncurry next) where
     Yield b sb' -> Yield b (sa,Just (Unfold sb' nextb))
 
 instance Monad NuList where
+  {-# INLINE return #-}
   return x = Unfold True $ \s -> case s of
     True -> Yield x False
     False -> Done
+  {-# INLINE (>>=) #-}
   (>>=) = flip concatMapNu -- Not *really* a monad: uses general recursion.
--}
 
 {-# INLINE stepToMaybe #-}
 stepToMaybe :: Step t t1 -> Maybe (t, t1)
@@ -199,7 +215,7 @@ zipNu = zipWithNu (,)
 
 {-# INLINE zipWithNu #-}
 zipWithNu :: (a -> b -> c) -> NuList a -> NuList b -> NuList c
-zipWithNu f (Unfold s1 psi1) (Unfold s2 psi2) = Unfold (s1,s2) go 
+zipWithNu f (Unfold s1 psi1) (Unfold s2 psi2) = Unfold (s1,s2) go
   where go ~(t1,t2) = case (psi1 t1,psi2 t2) of
            (Done,_) -> Done
            (_,Done) -> Done
@@ -221,16 +237,22 @@ takeWhileNu p (Unfold s0 psi) = Unfold s0 go where
     Yield x t -> if p x then Yield x t else Done
 
 {-# INLINE enumNu #-}
-enumNu :: Int -> NuList Int
-enumNu to = Unfold 0 $ \n -> if n < to then Yield n (n+1) else Done
+enumNu :: (Num a,Ord a) => a -> NuList a
+enumNu to = Unfold 0 $ \n -> if n <= to then Yield n (n+1) else Done
 
 {-# INLINE enumFromNu #-}
-enumFromNu :: Int -> NuList Int
+enumFromNu :: Num a => a -> NuList a
 enumFromNu from = Unfold from $ \n -> Yield n (n+1)
 
 {-# INLINE enumFromToNu #-}
-enumFromToNu :: Int -> Int -> NuList Int
-enumFromToNu from to = takeNu (to - from) (enumFromNu from)
+enumFromToNu :: (Num a,Ord a) => a -> a -> NuList a
+enumFromToNu from to = enumFromThenToNu from (from+1) to
+
+{-# INLINE enumFromThenToNu #-}
+enumFromThenToNu :: (Num a,Ord a) => a -> a -> a -> NuList a
+enumFromThenToNu from thn to = Unfold from $ \ n -> if n <= to then Yield n (n + delta) else Done
+  where
+    delta = thn - from
 
 {-# INLINE scanNu #-}
 scanNu :: (b -> a -> b) -> b -> NuList a -> NuList b
@@ -384,10 +406,10 @@ thaw (Build g) = Unfold (g fixCons fixNil) out
 {-# INLINE freeze #-}
 freeze :: forall a. NuList a -> MuList a
 freeze (Unfold s0 psi) = Build $ \ cons nil ->
-  let go s = case psi s of
+  let go_freeze s = case psi s of
           Done -> nil
-          Yield a s' -> cons a (go s')
-  in  go s0
+          Yield a s' -> cons a (go_freeze s')
+  in  go_freeze s0
 
 freezeList :: forall a. [a] -> MuList a
 freezeList xs = Build $ \cons nil -> Prelude.foldr cons nil xs
