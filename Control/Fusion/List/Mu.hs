@@ -22,7 +22,7 @@ import Data.Monoid
 
 -- Fα = 1 + a × α
 -- MuList a = μF
-newtype MuList a = Build {fold :: forall x. (a -> x -> x) -> x -> x}
+newtype MuList a = Build {foldMu :: forall x. (a -> x -> x) -> x -> x}
     {-   {fold :: forall x. (forall k . a -> x -> (x -> k) -> k)
                          -> (forall k . (x -> k) -> k)
                          ->
@@ -69,9 +69,17 @@ filterMu p (Build g) = Build $ \cons nil -> g (\h t -> if p h then cons h t else
 concatMu :: MuList (MuList a) -> MuList a
 concatMu (Build g) = Build $ \cons nil -> g (\(Build h) t -> h cons t) nil
 
+instance Applicative MuList where
+  pure = return
+  (<*>) = ap
+  
 instance Monad MuList where
   return x = Build $ \cons nil -> cons x nil
   x >>= f = concatMu (fmap f x) -- efficient!
+
+instance Alternative MuList where
+  empty = nilMu
+  (<|>) = appendMu
 
 instance MonadPlus MuList where
   mzero = nilMu
@@ -112,21 +120,23 @@ muToList :: MuList a -> [a]
 muToList (Build g) = g (:) []
 
 {-
+
+Cannot write this: it uses recursion (and we do not want control structures)
+
 enumFromMu :: Int -> MuList Int
 enumFromMu n = Build $ \cons nil -> cons n (fold (enumFromMu (n+1)) cons nil)
--- This is bad because we use gen. rec.
 
 enumMu :: (Enum a, Ord a) => a -> a -> MuList a
 enumMu from to | from > to = nilMu
                | otherwise = consMu from (enumMu (succ from) to)
--}
 
--- | blerg
+-- | blerg: loops not allowed.
 enumMu :: (Num a, Ord a) => a -> a -> MuList a
 enumMu from to = Build $ \ cons nil ->
     let go n | n > to = nil
              | otherwise = cons n (go (n + 1))
     in  go from
+-}
 
 headMu :: MuList a -> a
 headMu (Build g) = g (\h _ -> h) (error "headMu: empty list")
