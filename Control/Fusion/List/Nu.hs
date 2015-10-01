@@ -191,6 +191,14 @@ consNu a0 (Unfold s0 psi) = Unfold Nothing psi'
         psi' (Just s) = case psi s of
           Done -> Done
           Yield b s' -> Yield b (Just s')
+
+snocNu :: NuList a -> a -> NuList a
+snocNu (Unfold s0 psi) a0 = Unfold (Just s0) psi'
+  where psi' (Just s) = case psi s of
+          Yield b s' -> Yield b (Just s')
+          Done -> Yield a0 Nothing
+        psi' Nothing = Done
+
 {-
 consNu :: a -> NuList a -> NuList a
 consNu a0 (Unfold s0 psi) = Unfold (Just (a0,s0)) psi'
