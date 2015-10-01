@@ -1,4 +1,4 @@
-{-# LANGUAGE GADTs, RankNTypes, ScopedTypeVariables #-}
+{-# LANGUAGE GADTs, RankNTypes, ScopedTypeVariables, BangPatterns #-}
 module Control.Fusion.List.Nu where
 
 import Data.List (unfoldr)
@@ -18,6 +18,7 @@ data NuList a where
 instance Show a => Show (NuList a) where
   show = show . nuToList
 
+{-
 -- | blerg
 {-# INLINE concatMapNu #-}
 concatMapNu :: (a -> NuList b) -> NuList a -> NuList b
@@ -36,6 +37,7 @@ instance Monad NuList where
     False -> Done
   {-# INLINE (>>=) #-}
   (>>=) = flip concatMapNu -- Not *really* a monad: uses general recursion.
+-}
 
 {-# INLINE stepToMaybe #-}
 stepToMaybe :: Step t t1 -> Maybe (t, t1)
@@ -227,8 +229,17 @@ viewNu (Unfold s psi) = case psi s of
                              Done -> Done
                              Yield a s' -> Yield a (Unfold s' psi)
 
--------------------------
--- Sinks
+
+-- loops
+
+-- | Tail-recursive, strict, left fold.
+{-# INLINE foldNu #-}
+foldNu :: (b -> a -> b) -> b -> NuList a -> b
+foldNu f k (Unfold s0 psi) = go k s0
+  where go !acc s = case psi s of
+          Done -> acc
+          Yield x t  -> go (f acc x) t
+
 
 instance Foldable NuList where
   foldMap f = foldNu (\b a -> b `mappend` f a) mempty
@@ -237,16 +248,4 @@ instance Foldable NuList where
 {-# INLINE sumNu #-}
 sumNu :: NuList Int -> Int
 sumNu = foldNu (+) 0
-
--- 'foldl' (implemented with accumulator).  It's ok to use general
--- recursion here because it is the end of the pipeline.
-{-# INLINE foldNu #-}
-foldNu :: (b -> a -> b) -> b -> NuList a -> b
-foldNu f k (Unfold s0 psi) = go k s0
-  where go acc s = case psi s of
-          Done -> acc
-          Yield x t  -> go (f acc x) t
-
-
-
 
