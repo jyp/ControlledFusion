@@ -9,9 +9,10 @@ import Data.Monoid
 ---------------
 --  Nu lists
 
--- NuList a = νF
+-- List functor
 data Step a s = Done | Yield a s
 
+-- and its greatest fix point
 data NuList a where
   Unfold :: s -> (s -> Step a s) -> NuList a
 
@@ -232,13 +233,17 @@ viewNu (Unfold s psi) = case psi s of
 
 -- loops
 
--- | Tail-recursive, strict, left fold.
+-- | Tail-recursive, strict, left fold. Attention: this may allocate a data structure on the heap if the
+-- accumulating function is lazy. Example: if the accumulator type is
+-- a lazy tuple, typically its components won't be forced. Thus the
+-- function will just construct a long chain of thunks.
+
 {-# INLINE foldNu #-}
 foldNu :: (b -> a -> b) -> b -> NuList a -> b
 foldNu f k (Unfold s0 psi) = go k s0
   where go !acc s = case psi s of
           Done -> acc
-          Yield x t  -> go (f acc x) t
+          Yield x t -> go (f acc x) t
 
 
 instance Foldable NuList where

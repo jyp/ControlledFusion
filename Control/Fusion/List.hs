@@ -30,21 +30,23 @@ newtype Fix f = In {out :: f (Fix f)}
 type FixList a = Fix (Step a)
 
 
--- | This reifies the list taken as input; there is no way that it'll be
--- eliminated.
+-- | This reifies the list taken as input. This list will never be
+-- eliminated (fused). However, the list will always be built lazily;
+-- thus it won't necessarily consume O(n) space at runtime.
+-- Remark: this function uses data recursion.
 {-# INLINE thaw #-}
 thaw :: MuList a -> NuList a
 thaw (Build g) = Unfold (g fixCons fixNil) out
   where fixNil = In Done
         fixCons a x = In (Yield a x)
 
--- | Perform a non-tail recursive, lazy, right-fold.
--- This loop cannot be fused with another loop. Attention: this
--- function will reify a list ON THE STACK if the "cons" that it uses is
--- strict.
-{-# INLINE loopStack #-}
-loopStack :: forall a. NuList a -> MuList a
-loopStack (Unfold s0 psi) = Build $ \ cons nil ->
+-- | Attention: this function will typically cause the list to be reified on the stack at
+-- the point of consumption of the 'Mulist'. Example: @foldMu (freeze
+-- $ enumFromTo 1 100000) (+) 0@ Remark: this function uses
+-- computation recursion.
+{-# INLINE freeze #-}
+freeze :: forall a. NuList a -> MuList a
+freeze (Unfold s0 psi) = Build $ \ cons nil ->
   let go_freeze s = case psi s of
           Done -> nil
           Yield a s' -> cons a (go_freeze s')

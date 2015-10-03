@@ -22,6 +22,10 @@ import Data.Monoid
 
 -- Fα = 1 + a × α
 -- MuList a = μF
+
+-- Attention: running foldMu will effectively perform a non-tail
+-- recursive, lazy, right-fold.  This may therefore reify the list ON
+-- THE STACK if the "cons" that it uses is strict.
 newtype MuList a = Build {foldMu :: forall x. (a -> x -> x) -> x -> x}
     {-   {fold :: forall x. (forall k . a -> x -> (x -> k) -> k)
                          -> (forall k . (x -> k) -> k)
