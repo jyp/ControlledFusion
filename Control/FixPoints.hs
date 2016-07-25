@@ -1,5 +1,4 @@
-
-{-# LANGUAGE GADTs, RankNTypes, ScopedTypeVariables #-}
+{-# LANGUAGE GADTs, RankNTypes, ScopedTypeVariables, DeriveFunctor #-}
 module Control.FixPoints where
 
 -- | Both Mu and Nu
@@ -59,3 +58,35 @@ loop (Unfold psi s0) = Mu $ \phi -> let go = phi . fmap go . psi
 --    = phi . fmap (fixFold phi) . fmap (fixUnfold psi) . psi
 --    = phi . fmap (fixFold phi . fixUnfold psi) . psi
 --    = phi . fmap go . psi
+
+-- We can now if we so desire give definitions of muWalk and nuAlloc in terms of
+-- loop. These definitions will properly fuse. This shows that we need a single
+-- loop combinator.
+
+muWalk' :: Functor f => Fix f -> Mu f
+muWalk' = loop . nuWalk
+
+nuAlloc' :: Functor f => Nu f -> Fix f
+nuAlloc' = muAlloc . loop
+
+
+-- Examples:
+data ListF a x = Stop | More a x deriving Functor
+
+data NatF x = Z | S x deriving Functor
+
+natLoop :: Nu NatF -> Mu NatF
+natLoop = loop
+
+-- unfortunately this is consuming stack space :(
+while' :: s -> (s -> NatF s) -> (NatF r -> r) -> r
+while' initial step1 step2 = fold (natLoop (Unfold step1 initial)) step2
+
+data WhileF s x = Done s | Cont x deriving Functor
+
+data Void
+
+while :: s -> (s -> WhileF r s) -> (r -> Void) -> Void
+while initial step k = fold (loop (Unfold step initial)) $ \r -> case r of
+  Done r -> k r
+  Cont _ -> error "nope"
