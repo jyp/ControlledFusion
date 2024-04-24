@@ -4,6 +4,7 @@
 {-# LANGUAGE UnicodeSyntax #-}
 module Control.FixPoints where
 
+
 -- | Both Mu and Nu
 newtype Fix f = In (f (Fix f))
 out :: Fix f ⊸ f (Fix f)
@@ -49,13 +50,13 @@ nuAlloc (Unfold psi s0) = fixUnfold psi s0
 -- thus it won't necessarily consume O(n) space at runtime at any
 -- given point in time.
 muAlloc :: Mu f ⊸ Fix f
-muAlloc (Mu m) = m In
+muAlloc m = fold m In
 
--- | Prepare a bottom-up walk of the structure.
+-- | (Prepare) a bottom-up walk of the structure.
 muWalk :: LFunctor f => Fix f ⊸ Mu f
 muWalk s = Mu (\phi -> fixFold phi s)
 
--- | Prepare a top-down walk of the structure
+-- | (Prepare) a top-down walk of the structure
 nuWalk :: Fix f ⊸ Nu f
 nuWalk = Unfold out
 
@@ -67,8 +68,10 @@ alloc = nuWalk ∘ muAlloc
 -- structure to be reified on the stack at the time of the final fold
 -- (unless the algebra is lazy). So expect O(depth) stack to be used.
 loop :: LFunctor f => Nu f ⊸ Mu f
-loop (Unfold psi s0) = Mu (\phi -> let go = phi ∘ lfmap go ∘ psi
-                                    in go s0)
+loop (Unfold @x psi s0) = Mu (\ phi ->
+     let -- this is a function from x (from phi) to y
+         go =phi ∘ lfmap go ∘ psi
+     in go s0)
 -- go = fixFold phi . fixUnfold psi
 --    = phi . fmap (fixFold phi) . out . In . fmap (fixUnfold psi) . psi
 --    = phi . fmap (fixFold phi) . fmap (fixUnfold psi) . psi
@@ -87,11 +90,14 @@ nuAlloc' = muAlloc ∘ loop
 
 ------------------
 -- other functions
-mapMu :: LFunctor2 f => (a ⊸ b) -> Mu (f a) -> Mu (f b)
+
+mapMu :: LFunctor2 f => (a ⊸ b) -> Mu (f a) ⊸ Mu (f b)
 mapMu f (Mu phi0) = Mu (\phi1 -> phi0 (phi1 ∘ lfmap2 f))
+
 
 -- Examples:
 data ListF a x = Stop | More a x deriving Functor
+
 
 data NatF x = Z | S x
 

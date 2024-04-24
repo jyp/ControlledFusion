@@ -4,6 +4,7 @@ module Control.Fusion.Seq where
 
 import Data.Foldable as F
 import Data.Monoid
+import Control.Monad (ap)
 
 data Step a s = Done a | Yield s s
 instance Functor (Step a) where
@@ -68,9 +69,10 @@ instance Functor Push where
     {-# INLINE fmap #-}
     fmap f (Build g) = Build $ \ branch leaf -> g branch (leaf . f)
 
+instance Applicative Push where
+  pure  a = Build $ \ _ leaf -> leaf a
+  (<*>) = ap
 instance Monad Push where
-    {-# INLINE return #-}
-    return a = Build $ \ _ leaf -> leaf a
     {-# INLINE (>>=) #-}
     t >>= f = concatTree (fmap f t)
 
