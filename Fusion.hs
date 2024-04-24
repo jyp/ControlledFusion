@@ -25,7 +25,7 @@ import Data.Maybe
 -- Fα = 1 + a × α
 -- MuList a = μF
 newtype MuList a = Build {fold :: forall x. (a -> x -> x) -> x -> x}
-    {-   {fold :: forall x. (forall k . a -> x -> (x -> k) -> k)
+    {-   fold :: forall x. (forall k . a -> x -> (x -> k) -> k)
                          -> (forall k . (x -> k) -> k)
                          ->
     -}
@@ -43,9 +43,10 @@ instance Foldable MuList where
 instance Traversable MuList where  -- ????
    traverse f (Build g) = g (\h t -> consMu <$> f h <*> t) (pure nilMu)
 
+instance Semigroup (MuList a) where
+  (<>) = appendMu
 instance Monoid (MuList a) where
   mempty = nilMu
-  mappend = appendMu
 
 {-# INLINE consMu #-}
 consMu :: a -> MuList a -> MuList a
@@ -71,13 +72,14 @@ filterMu p (Build g) = Build $ \cons nil -> g (\h t -> if p h then cons h t else
 concatMu :: MuList (MuList a) -> MuList a
 concatMu (Build g) = Build $ \cons nil -> g (\(Build h) t -> h cons t) nil
 
+instance Applicative MuList where
+  pure x = Build $ \cons nil -> cons x nil
+  (<*>) = ap
 instance Monad MuList where
-  return x = Build $ \cons nil -> cons x nil
   x >>= f = concatMu (fmap f x) -- efficient!
-
-instance MonadPlus MuList where
-  mzero = nilMu
-  mplus = appendMu
+instance Alternative MuList where
+  empty = nilMu
+  (<|>) = appendMu
 
 {-# INLINE takeWhileMu #-}
 takeWhileMu :: (a -> Bool) -> MuList a -> MuList a
@@ -172,11 +174,13 @@ concatMapNu f (Unfold sa0 nexta) = Unfold (sa0, Nothing) (uncurry next) where
     Done -> next sa Nothing
     Yield b sb' -> Yield b (sa,Just (Unfold sb' nextb))
 
-instance Monad NuList where
-  {-# INLINE return #-}
-  return x = Unfold True $ \s -> case s of
+instance Applicative NuList where
+  {-# INLINE pure #-}
+  pure x = Unfold True $ \s -> case s of
     True -> Yield x False
     False -> Done
+  (<*>) = ap
+instance Monad NuList where
   {-# INLINE (>>=) #-}
   (>>=) = flip concatMapNu -- Not *really* a monad: uses general recursion.
 
