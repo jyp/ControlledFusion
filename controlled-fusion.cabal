@@ -1,0 +1,18 @@
+cabal-version: 3.0
+name:           controlled-fusion
+version:        1.0
+category:       nonsense
+synopsis:       Whatever
+description:
+  Soon to appear.
+license:   AGPL-3.0-or-later
+author:         Jean-Philippe Bernardy
+maintainer:     jeanphilippe.bernardy@gmail.com
+tested-with:    GHC==9.4.1
+build-type:     Simple
+
+library
+   default-language: Haskell2010
+   build-depends: base
+   exposed-modules:
+      Control.Functor.Linear

@@ -2,8 +2,10 @@
 {-# LANGUAGE GADTs, RankNTypes, ScopedTypeVariables, DeriveFunctor #-}
 {-# LANGUAGE LinearTypes #-}
 {-# LANGUAGE UnicodeSyntax #-}
+{-# LANGUAGE EmptyCase #-}
 module Control.FixPoints where
 
+import Control.Functor.Linear
 
 -- | Both Mu and Nu
 newtype Fix f = In (f (Fix f))
@@ -17,13 +19,8 @@ fold (Mu f) = f
 
 -- | Positive view of Fix. Some data that can generate the structure, on demand.
 data Nu f where
-  Unfold :: (x ⊸ f x) -> x ⊸ Nu f
+  Nu :: (x ⊸ f x) -> x ⊸ Nu f
 
-class LFunctor f where
-  lfmap :: (a ⊸ b) -> f a ⊸ f b
-
-class LFunctor2 f where
-  lfmap2 :: (a ⊸ b) -> f a x ⊸ f b x
 
 (∘) :: (b ⊸ c) ⊸ (a ⊸ b) ⊸ a ⊸ c
 (f ∘ g) x = f (g x)
@@ -40,9 +37,9 @@ fixUnfold f = In ∘ lfmap (fixUnfold f) ∘ f
 -- are expected. Avoid if possible: this will allocate data into the
 -- heap and won't fuse. However the structure will be built lazily;
 -- thus it won't necessarily consume O(n) space at runtime at any
--- given point in time.
-nuAlloc :: LFunctor f => Nu f ⊸ Fix f
-nuAlloc (Unfold psi s0) = fixUnfold psi s0
+-- given point in time. Also known as anamorphism.
+nuAlloc' :: LFunctor f => Nu f ⊸ Fix f
+nuAlloc' (Nu psi s0) = fixUnfold psi s0
 
 -- | Reify a Mu into a Fix. Useful if many walks over the structure
 -- are expected. Avoid if possible: this will allocate data into the
@@ -52,25 +49,34 @@ nuAlloc (Unfold psi s0) = fixUnfold psi s0
 muAlloc :: Mu f ⊸ Fix f
 muAlloc m = fold m In
 
--- | (Prepare) a bottom-up walk of the structure.
-muWalk :: LFunctor f => Fix f ⊸ Mu f
-muWalk s = Mu (\phi -> fixFold phi s)
+-- | (Prepare) a bottom-up walk of the structure. Even if the language
+-- were strict, the walk would happen only when folding the
+-- result. Also known as catamorphism.
+muWalk' :: LFunctor f => Fix f ⊸ Mu f
+muWalk' s = Mu (\phi -> fixFold phi s)
 
--- | (Prepare) a top-down walk of the structure
+-- | (Prepare) a top-down walk of the structure.  Even if the language
+-- were strict, the walk would happen only when unfolding the result.
 nuWalk :: Fix f ⊸ Nu f
-nuWalk = Unfold out
+nuWalk = Nu out
 
+-- | Allocate an intermediate data structure. Even with a linear type,
+-- this function does need to allocate some intermediate data, because
+-- the input (Mu) controls the production, and (Nu) controls the
+-- consumption. Hence, the output may 
 alloc :: Mu f ⊸ Nu f
 alloc = nuWalk ∘ muAlloc
+-- alloc m = Nu out  (fold m In)
+
 
 -- | 'muWalk . nuAlloc', fused. The intermediate Fix structure is not allocated as such,
 -- but there is a loop in here, so this function will cause the data
--- structure to be reified on the stack at the time of the final fold
+-- structure to be reified at the time of the final fold
 -- (unless the algebra is lazy). So expect O(depth) stack to be used.
 loop :: LFunctor f => Nu f ⊸ Mu f
-loop (Unfold @x psi s0) = Mu (\ phi ->
+loop (Nu psi s0) = Mu (\ phi ->
      let -- this is a function from x (from phi) to y
-         go =phi ∘ lfmap go ∘ psi
+         go = phi ∘ lfmap go ∘ psi
      in go s0)
 -- go = fixFold phi . fixUnfold psi
 --    = phi . fmap (fixFold phi) . out . In . fmap (fixUnfold psi) . psi
@@ -79,20 +85,23 @@ loop (Unfold @x psi s0) = Mu (\ phi ->
 --    = phi . fmap go . psi
 
 -- We can now if we so desire give definitions of muWalk and nuAlloc in terms of
--- loop. These definitions will properly fuse. This shows that we need a single
--- loop combinator.
+-- loop. These definitions will properly fuse (because they compose with a ).
+-- This shows that we need a single loop combinator.
 
-muWalk' :: LFunctor f => Fix f ⊸ Mu f
-muWalk' = loop ∘ nuWalk
+muWalk :: LFunctor f => Fix f ⊸ Mu f
+muWalk = loop ∘ nuWalk
 
-nuAlloc' :: LFunctor f => Nu f ⊸ Fix f
-nuAlloc' = muAlloc ∘ loop
+nuAlloc :: LFunctor f => Nu f ⊸ Fix f
+nuAlloc = muAlloc ∘ loop
 
 ------------------
 -- other functions
 
-mapMu :: LFunctor2 f => (a ⊸ b) -> Mu (f a) ⊸ Mu (f b)
-mapMu f (Mu phi0) = Mu (\phi1 -> phi0 (phi1 ∘ lfmap2 f))
+mapMu :: (forall x. f x ⊸ g x) -> Mu f ⊸ Mu g
+mapMu f (Mu phi0) = Mu (\phi1 -> phi0 (phi1 ∘ f))
+
+mapNu :: (forall x. f x ⊸ g x) -> Nu f ⊸ Nu g
+mapNu f (Nu psi0 s) = Nu (f ∘ psi0) s
 
 
 -- Examples:
@@ -111,7 +120,7 @@ natLoop = loop
 
 -- unfortunately this is consuming stack space :(
 while' :: s ⊸ (s ⊸ NatF s) -> (NatF r ⊸ r) -> r
-while' initial step1 step2 = fold (natLoop (Unfold step1 initial)) step2
+while' initial step1 step2 = fold (natLoop (Nu step1 initial)) step2
 
 instance LFunctor (WhileF s) where
   lfmap f = \case
@@ -122,6 +131,6 @@ data WhileF s x = Done s | Cont x
 data Void
 
 while :: s ⊸ (s ⊸ WhileF r s) -> (r ⊸ Void) -> Void
-while initial step k = fold (loop (Unfold step initial)) (\case
+while initial step k = fold (loop (Nu step initial)) (\case
   Done r -> k r
   Cont x -> case x of)

@@ -18,3 +18,5 @@ mpxerr.*
 .#*
 
 Examples
+/dist-newstyle/
+/newdist/
